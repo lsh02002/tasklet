@@ -1,27 +1,25 @@
-import { type DragEvent, useCallback, useEffect, useState } from "react";
+import {
+  type DragEvent,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 
 import type {
   Task,
   TaskStatus,
   Column,
   HistoryState,
-  TasksUpdater,
-  ColumnsUpdater,
+  BoardState,
 } from "./type";
 
 import Card from "./Card";
+import { boardApi } from "./api/board";
 
-const initialColumns: Column[] = [
-  { status: "todo", title: "할 일", color: "#E3F2FD" },
-  { status: "doing", title: "진행 중", color: "#FFF3CD" },
-  { status: "done", title: "완료", color: "#D1E7DD" },
-];
+const initialColumns: Column[] = [];
 
-const initialTasks: Task[] = [
-  { id: "1", title: "Task 1", status: "todo" },
-  { id: "2", title: "Task 2", status: "doing" },
-  { id: "3", title: "Task 3", status: "done" },
-];
+const initialTasks: Task[] = [];
 
 function App() {
   const [history, setHistory] = useState<HistoryState>({
@@ -34,111 +32,59 @@ function App() {
   });
 
   const [draggedId, setDraggedId] = useState<string | null>(null);
-
   const [draggedColumn, setDraggedColumn] = useState<TaskStatus | null>(null);
 
-  const { tasks, columns } = history.present;
+  const [busy, setBusy] = useState(false);
 
-  const canUndo = history.past.length > 0;
-  const canRedo = history.future.length > 0;
+  const historyRef = useRef<HistoryState | null>(null);
+  const busyRef = useRef(false);
 
-  // Task 변경 및 히스토리 기록
-  const setTasks = useCallback(
-    (updater: TasksUpdater, recordHistory = true) => {
-      setHistory((prev) => {
-        const nextTasks =
-          typeof updater === "function" ? updater(prev.present.tasks) : updater;
+  const tasks = history?.present.tasks ?? [];
+  const columns = history?.present.columns ?? [];
 
-        if (nextTasks === prev.present.tasks) {
-          return prev;
-        }
+  const canUndo = !busy && (history?.past.length ?? 0) > 0;
+  const canRedo = !busy && (history?.future.length ?? 0) > 0;
 
-        const nextPresent = {
-          ...prev.present,
-          tasks: nextTasks,
-        };
+  useEffect(() => {
+    boardApi
+      .getBoard()
+      .then((next) => {
+        historyRef.current = next;
+        setHistory(next);
+      })
+      .catch(console.error);
+  }, []);
 
-        if (!recordHistory) {
-          return {
-            ...prev,
-            present: nextPresent,
-          };
-        }
+  // 백엔드 작업 공통 처리
+  const runCommand = useCallback(
+    async (command: () => Promise<HistoryState>) => {
+      if (busyRef.current || !historyRef.current) return;
 
-        return {
-          past: [...prev.past, prev.present],
-          present: nextPresent,
-          future: [],
-        };
-      });
+      busyRef.current = true;
+      setBusy(true);
+
+      try {
+        const next = await command();
+
+        historyRef.current = next;
+        setHistory(next);
+      } catch (error) {
+        console.error("Board update failed:", error);
+      } finally {
+        busyRef.current = false;
+        setBusy(false);
+      }
     },
     [],
   );
 
-  // Column 변경 및 히스토리 기록
-  const setColumns = useCallback(
-    (updater: ColumnsUpdater, recordHistory = true) => {
-      setHistory((prev) => {
-        const nextColumns =
-          typeof updater === "function"
-            ? updater(prev.present.columns)
-            : updater;
+  const undo = useCallback(async () => {
+    await runCommand(() => boardApi.undo());
+  }, [runCommand]);
 
-        if (nextColumns === prev.present.columns) {
-          return prev;
-        }
-
-        const nextPresent = {
-          ...prev.present,
-          columns: nextColumns,
-        };
-
-        if (!recordHistory) {
-          return {
-            ...prev,
-            present: nextPresent,
-          };
-        }
-
-        return {
-          past: [...prev.past, prev.present],
-          present: nextPresent,
-          future: [],
-        };
-      });
-    },
-    [],
-  );
-
-  // Undo
-  const undo = useCallback(() => {
-    setHistory((prev) => {
-      if (prev.past.length === 0) return prev;
-
-      const previous = prev.past[prev.past.length - 1];
-
-      return {
-        past: prev.past.slice(0, -1),
-        present: previous,
-        future: [prev.present, ...prev.future],
-      };
-    });
-  }, []);
-
-  // Redo
-  const redo = useCallback(() => {
-    setHistory((prev) => {
-      if (prev.future.length === 0) return prev;
-
-      const next = prev.future[0];
-
-      return {
-        past: [...prev.past, prev.present],
-        present: next,
-        future: prev.future.slice(1),
-      };
-    });
-  }, []);
+  const redo = useCallback(async () => {
+    await runCommand(() => boardApi.redo());
+  }, [runCommand]);
 
   // 키보드 단축키
   useEffect(() => {
@@ -178,6 +124,67 @@ function App() {
     };
   }, [canUndo, canRedo, undo, redo]);
 
+  const addTask = async (status: TaskStatus) => {
+    const title = window.prompt("Enter task title");
+
+    if (!title?.trim()) return;
+
+    const next = await boardApi.addTask(title.trim(), status);
+
+    setHistory(next);
+  };
+
+  const deleteTask = async (taskId: string) => {
+    const next = await boardApi.deleteTask(taskId);
+    setHistory(next);
+  };
+
+  // Task 변경
+  const updateTasks = useCallback(
+    async (updater: Task[] | ((prev: Task[]) => Task[])) => {
+      const current = historyRef.current;
+      if (!current) return;
+
+      const prevTasks = current.present.tasks;
+
+      const nextTasks =
+        typeof updater === "function" ? updater(prevTasks) : updater;
+
+      if (nextTasks === prevTasks) return;
+
+      const board: BoardState = {
+        ...current.present,
+        tasks: nextTasks,
+      };
+
+      await runCommand(() => boardApi.updateBoard(board));
+    },
+    [runCommand],
+  );
+
+  // Column 변경
+  const updateColumns = useCallback(
+    async (updater: Column[] | ((prev: Column[]) => Column[])) => {
+      const current = historyRef.current;
+      if (!current) return;
+
+      const prevColumns = current.present.columns;
+
+      const nextColumns =
+        typeof updater === "function" ? updater(prevColumns) : updater;
+
+      if (nextColumns === prevColumns) return;
+
+      const board: BoardState = {
+        ...current.present,
+        columns: nextColumns,
+      };
+
+      await runCommand(() => boardApi.updateBoard(board));
+    },
+    [runCommand],
+  );
+
   // Task 드래그 시작
   const handleTaskDragStart = (
     event: DragEvent<HTMLElement>,
@@ -185,9 +192,9 @@ function App() {
   ) => {
     event.stopPropagation();
 
-    event.dataTransfer.setData("application/x-task", taskId);
-    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("text/plain", `task:${taskId}`);
 
+    event.dataTransfer.effectAllowed = "move";
     setDraggedId(taskId);
   };
 
@@ -205,18 +212,20 @@ function App() {
     event.preventDefault();
     event.stopPropagation();
 
-    if (!event.dataTransfer.types.includes("application/x-task")) {
+    const data = event.dataTransfer.getData("text/plain");
+
+    if (!data.startsWith("task:")) {
       return;
     }
 
-    const id = event.dataTransfer.getData("application/x-task") || draggedId;
+    const id = data.slice("task:".length) || draggedId;
 
     if (!id || id === targetId) {
       handleTaskDragEnd();
       return;
     }
 
-    setTasks((prev) => {
+    void updateTasks((prev) => {
       const moving = prev.find((task) => task.id === id);
 
       if (!moving) return prev;
@@ -261,9 +270,9 @@ function App() {
   ) => {
     event.stopPropagation();
 
-    event.dataTransfer.setData("application/x-column", status);
-    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("text/plain", `column:${status}`);
 
+    event.dataTransfer.effectAllowed = "move";
     setDraggedColumn(status);
   };
 
@@ -280,15 +289,21 @@ function App() {
     event.preventDefault();
     event.stopPropagation();
 
+    const data = event.dataTransfer.getData("text/plain");
+
+    if (!data.startsWith("column:")) {
+      return;
+    }
+
     const sourceStatus =
-      event.dataTransfer.getData("application/x-column") || draggedColumn;
+      (data.slice("column:".length) as TaskStatus) || draggedColumn;
 
     if (!sourceStatus || sourceStatus === targetStatus) {
       handleColumnDragEnd();
       return;
     }
 
-    setColumns((prev) => {
+    void updateColumns((prev) => {
       const sourceIndex = prev.findIndex(
         (column) => column.status === sourceStatus,
       );
@@ -311,27 +326,6 @@ function App() {
     });
 
     handleColumnDragEnd();
-  };
-
-  // Task 추가
-  const addTask = (status: TaskStatus) => {
-    const title = window.prompt("Enter task title");
-
-    if (!title?.trim()) return;
-
-    setTasks((prev) => [
-      ...prev,
-      {
-        id: crypto.randomUUID(),
-        title: title.trim(),
-        status,
-      },
-    ]);
-  };
-
-  // Task 삭제
-  const deleteTask = (taskId: string) => {
-    setTasks((prev) => prev.filter((task) => task.id !== taskId));
   };
 
   return (
@@ -370,13 +364,19 @@ function App() {
               }}
               onDragOver={(event) => {
                 event.preventDefault();
+                event.dataTransfer.dropEffect = "move";
               }}
               onDrop={(event) => {
-                if (event.dataTransfer.types.includes("application/x-column")) {
+                event.preventDefault();
+                event.stopPropagation();
+
+                if (busyRef.current) return;
+
+                const data = event.dataTransfer.getData("text/plain");
+
+                if (data.startsWith("column:")) {
                   handleColumnDrop(event, column.status);
-                } else if (
-                  event.dataTransfer.types.includes("application/x-task")
-                ) {
+                } else if (data.startsWith("task:")) {
                   handleTaskDrop(event, column.status);
                 }
               }}
@@ -415,9 +415,9 @@ function App() {
                     onDragStart={handleTaskDragStart}
                     onDragEnd={handleTaskDragEnd}
                     onDrop={(event) => {
-                      if (
-                        event.dataTransfer.types.includes("application/x-task")
-                      ) {
+                      const data = event.dataTransfer.getData("text/plain");
+
+                      if (data.startsWith("task:")) {
                         handleTaskDrop(event, column.status, task.id);
                       }
                     }}
