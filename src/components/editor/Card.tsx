@@ -1,5 +1,5 @@
 import { type DragEvent, useState } from "react";
-import type { Task } from "./type";
+import type { Task } from "../../type";
 
 type CardProps = {
   task: Task;
