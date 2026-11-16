@@ -1,4 +1,4 @@
-import { type DragEvent, useState } from "react";
+import { type DragEvent, useState, useRef } from "react";
 import {
   AlertCircle,
   ArrowDown,
@@ -13,15 +13,27 @@ import {
   ListTodo,
   Trash2,
 } from "lucide-react";
-import type { Task, TaskPriority, TaskType } from "../../type";
+import type { Task, TaskPriority, TaskType, DropPosition } from "../../type";
 import "./TaskCard.css";
+
+type DropZone = {
+  taskId: string;
+  position: DropPosition;
+};
 
 type CardProps = {
   task: Task;
   onDragStart: (event: DragEvent<HTMLElement>, taskId: string) => void;
   onDragEnd: () => void;
-  onDrop: (event: DragEvent<HTMLElement>) => void;
+  onDrop: (
+    event: DragEvent<HTMLElement>,
+    taskId: string,
+    position: DropPosition,
+  ) => void;
   onDelete: () => void;
+
+  activeDropZone: DropZone | null;
+  setActiveDropZone: (zone: DropZone | null) => void;
 };
 
 const typeConfig = {
@@ -62,8 +74,13 @@ function TaskCard({
   onDragEnd,
   onDrop,
   onDelete,
+  activeDropZone,
+  setActiveDropZone,
 }: CardProps) {
-  const [isOver, setIsOver] = useState(false);
+  const cardRef = useRef<HTMLDivElement>(null);
+  const wrapperRef = useRef<HTMLDivElement>(null);
+
+  const [cardHeight, setCardHeight] = useState(0);
 
   const type = typeConfig[task.taskType] ?? typeConfig.Task;
   const priority = priorityConfig[task.priority] ?? priorityConfig.Medium;
@@ -73,79 +90,155 @@ function TaskCard({
   const PriorityIcon = priority.icon;
   const StatusIcon = status.icon;
 
+  const handleDragOver = (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+
+    const data = event.dataTransfer.types;
+
+    if (!data.includes("text/plain")) return;
+
+    event.dataTransfer.dropEffect = "move";
+
+    const rect = cardRef.current?.getBoundingClientRect();
+    if (!rect) return;
+
+    setCardHeight((prev) => (prev === rect.height ? prev : rect.height));
+
+    const position: DropPosition =
+      event.clientY < rect.top + rect.height / 2 ? "top" : "bottom";
+
+    if (
+      activeDropZone?.taskId !== task.id ||
+      activeDropZone.position !== position
+    ) {
+      setActiveDropZone({
+        taskId: task.id,
+        position,
+      });
+    }
+  };
+
+  const handleDragLeave = (event: DragEvent<HTMLDivElement>) => {
+    const rect = wrapperRef.current?.getBoundingClientRect();
+    if (!rect) return;
+
+    const { clientX, clientY } = event;
+
+    if (
+      clientX < rect.left ||
+      clientX > rect.right ||
+      clientY < rect.top ||
+      clientY > rect.bottom
+    ) {
+      if (activeDropZone?.taskId === task.id) {
+        setActiveDropZone(null);
+      }
+    }
+  };
+
+  const handleDrop = (event: DragEvent<HTMLElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+
+    const position: DropPosition =
+      activeDropZone?.taskId === task.id ? activeDropZone.position : "bottom";
+
+    setActiveDropZone(null);
+    onDrop(event, task.id, position);
+  };
+
   return (
     <div
-      className={`task-card ${isOver ? "task-card-over" : ""}`}
-      draggable
-      onDragStart={(event) => onDragStart(event, task.id)}
-      onDragEnd={() => {
-        setIsOver(false);
-        onDragEnd();
-      }}
-      onDragOver={(event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        event.dataTransfer.dropEffect = "move";
-        setIsOver(true);
-      }}
-      onDragLeave={() => setIsOver(false)}
-      onDrop={(event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        setIsOver(false);
-        onDrop(event);
-      }}
+      ref={wrapperRef}
+      className="task-card-wrapper"
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
     >
-      {/* Header */}
-      <div className="task-card-header">
-        <div className="task-card-type" style={{ color: type.color }}>
-          <TypeIcon size={15} strokeWidth={2.2} />
-          <span>{task.taskType}</span>
-        </div>
-
-        <div className="task-card-actions">
+      {activeDropZone?.taskId === task.id &&
+        activeDropZone.position === "top" && (
           <div
-            className="task-card-priority"
-            style={{ color: priority.color }}
-            title={`${task.priority} priority`}
-          >
-            <PriorityIcon size={14} />
-            <span>{task.priority}</span>
+            className="task-card-placeholder"
+            style={{ height: cardHeight }}
+            aria-hidden="true"
+          />
+        )}
+      <div
+        ref={cardRef}
+        className="task-card"
+        draggable
+        onDragStart={(event) => {
+          setActiveDropZone(null);
+          onDragStart(event, task.id);
+        }}
+        onDragEnd={() => {
+          setActiveDropZone(null);
+          onDragEnd();
+        }}
+      >
+        {/* Header */}
+        <div className="task-card-header">
+          <div className="task-card-type" style={{ color: type.color }}>
+            <TypeIcon size={15} strokeWidth={2.2} />
+            <span>{task.taskType ?? "Task"}</span>
           </div>
 
-          <button
-            type="button"
-            className="task-card-delete"
-            title="Delete task"
-            aria-label="Delete task"
-            draggable={false}
-            onClick={(event) => {
-              event.stopPropagation();
-              onDelete();
-            }}
-          >
-            <Trash2 size={14} />
-          </button>
+          <div className="task-card-actions">
+            <div
+              className="task-card-priority"
+              style={{ color: priority.color }}
+              title={`${task.priority ?? "Medium"} priority`}
+            >
+              <PriorityIcon size={14} />
+              <span>{task.priority ?? "Medium"}</span>
+            </div>
+
+            <button
+              type="button"
+              className="task-card-delete"
+              title="Delete task"
+              aria-label="Delete task"
+              draggable={false}
+              onClick={(event) => {
+                event.stopPropagation();
+                onDelete();
+              }}
+            >
+              <Trash2 size={14} />
+            </button>
+          </div>
+        </div>
+
+        {/* Title */}
+        <div className="task-card-title">{task.title}</div>
+
+        {/* Footer */}
+        <div className="task-card-footer">
+          <span className={`task-status task-status-${task.status}`}>
+            <StatusIcon size={12} />
+            {status.label}
+          </span>
+
+          {task.createdAt && (
+            <div className="task-card-date">
+              <CalendarDays size={12} />
+              <span>
+                {new Date(task.createdAt).toLocaleDateString("ko-KR")}
+              </span>
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Title */}
-      <div className="task-card-title">{task.title}</div>
-
-      {/* Footer */}
-      <div className="task-card-footer">
-        <span className={`task-status task-status-${task.status}`}>
-          <StatusIcon size={12} />
-          {status.label}
-        </span>
-
-        {task.createdAt && (
-          <div className="task-card-date">
-            <CalendarDays size={12} />
-            <span>{new Date(task.createdAt).toLocaleDateString("ko-KR")}</span>
-          </div>
+      {activeDropZone?.taskId === task.id &&
+        activeDropZone.position === "bottom" && (
+          <div
+            className="task-card-placeholder"
+            style={{ height: cardHeight }}
+            aria-hidden="true"
+          />
         )}
-      </div>
     </div>
   );
 }

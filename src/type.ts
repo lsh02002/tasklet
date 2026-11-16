@@ -44,3 +44,5 @@ export interface HistoryState {
 export type TasksUpdater = Task[] | ((prev: Task[]) => Task[]);
 
 export type ColumnsUpdater = Column[] | ((prev: Column[]) => Column[]);
+
+export type DropPosition = "top" | "bottom";

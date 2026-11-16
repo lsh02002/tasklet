@@ -1,6 +1,6 @@
-import type { DragEvent } from "react";
+import { useState, type DragEvent } from "react";
 import TaskCard from "./TaskCard";
-import type { BoardState, TaskStatus } from "../../type";
+import type { BoardState, DropPosition, TaskStatus } from "../../type";
 
 type Column = BoardState["columns"][number];
 type Task = BoardState["tasks"][number];
@@ -29,7 +29,8 @@ interface ColumnsProps {
     event: DragEvent<HTMLElement>,
     status: TaskStatus,
     listId: string,
-    taskId?: string,
+    taskId: string,
+    position: DropPosition,
   ) => void;
 }
 
@@ -47,6 +48,11 @@ export default function ColumnCard({
   handleTaskDragEnd,
   handleTaskDrop,
 }: ColumnsProps) {
+  const [activeDropZone, setActiveDropZone] = useState<{
+    taskId: string;
+    position: DropPosition;
+  } | null>(null);
+
   return (
     <div className="d-flex justify-content-between gap-3">
       {columns
@@ -72,13 +78,43 @@ export default function ColumnCard({
               if (data.startsWith("column:")) {
                 handleColumnDrop(event, column.status, listId);
               } else if (data.startsWith("task:")) {
-                handleTaskDrop(event, column.status, listId);
+                handleTaskDrop(event, column.status, listId, "", "bottom");
               }
             }}
           >
             <div className="d-flex justify-content-between">
               <h5>{column.title}</h5>
             </div>
+
+            <div
+              className="kanban-top-dropzone"
+              onDragOver={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                event.dataTransfer.dropEffect = "move";
+
+                setActiveDropZone(null);
+              }}
+              onDrop={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+
+                const firstTask = tasks.find(
+                  (task) =>
+                    task.listId === listId && task.status === column.status,
+                );
+
+                handleTaskDrop(
+                  event,
+                  column.status,
+                  listId,
+                  firstTask?.id ?? "",
+                  "top",
+                );
+
+                setActiveDropZone(null);
+              }}
+            />
 
             {tasks
               .filter(
@@ -89,11 +125,23 @@ export default function ColumnCard({
                 <TaskCard
                   key={task.id}
                   task={task}
+                  activeDropZone={activeDropZone}
+                  setActiveDropZone={setActiveDropZone}
                   onDragStart={handleTaskDragStart}
-                  onDragEnd={handleTaskDragEnd}
-                  onDrop={(event) =>
-                    handleTaskDrop(event, column.status, listId, task.id)
-                  }
+                  onDragEnd={() => {
+                    setActiveDropZone(null);
+                    handleTaskDragEnd();
+                  }}
+                  onDrop={(event, targetTaskId, position) => {
+                    setActiveDropZone(null);
+                    handleTaskDrop(
+                      event,
+                      column.status,
+                      listId,
+                      targetTaskId,
+                      position,
+                    );
+                  }}
                   onDelete={() => deleteTask(task.id)}
                 />
               ))}

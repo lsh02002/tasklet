@@ -13,6 +13,23 @@
     border-color 0.2s ease;
 }
 
+/* 카드 상단 드롭 */
+.task-card-drop-top {
+  border-top: 3px solid #3b82f6;
+  background: #eff6ff;
+}
+
+/* 카드 하단 드롭 */
+.task-card-drop-bottom {
+  border-bottom: 3px solid #3b82f6;
+  background: #eff6ff;
+}
+
+.task-card-drop-top,
+.task-card-drop-bottom {
+  transform: none;
+}
+
 .task-card:hover {
   border-color: #cbd5e1;
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.07);
@@ -137,6 +154,42 @@
 
 @media (hover: none) {
   .task-card-delete {
+    opacity: 1;
+  }
+}
+
+.task-card-wrapper {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.task-card-wrapper .task-card {
+  margin-bottom: 0;
+  flex-shrink: 0;
+}
+
+.task-card-placeholder {
+  width: 100%;
+  flex-shrink: 0;
+  box-sizing: border-box;
+
+  border: 2px dashed #3b82f6;
+  border-radius: 10px;
+  background: rgba(59, 130, 246, 0.08);
+
+  pointer-events: none;
+  animation: placeholder-appear 0.15s ease-out;
+}
+
+@keyframes placeholder-appear {
+  from {
+    opacity: 0;
+  }
+
+  to {
     opacity: 1;
   }
 }

@@ -1,16 +1,18 @@
 import { useState } from "react";
 import type { DragEvent } from "react";
-import type { Task, TaskStatus, Column } from "../../type";
+import type { Task, TaskStatus, Column, DropPosition } from "../../type";
 
-const useDragDrop = ({
-  updateTasks,
-  updateColumns,
-}: {
+type UseDragDropProps = {
   updateTasks: (callback: (prev: Task[]) => Task[]) => Promise<void>;
+
   updateColumns: (callback: (prev: Column[]) => Column[]) => Promise<void>;
-}) => {
+};
+
+const useDragDrop = ({ updateTasks, updateColumns }: UseDragDropProps) => {
   const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
+
   const [draggedColumnId, setDraggedColumnId] = useState<string | null>(null);
+
   // Task 드래그 시작
   const handleTaskDragStart = (
     event: DragEvent<HTMLElement>,
@@ -35,17 +37,16 @@ const useDragDrop = ({
     status: TaskStatus,
     listId: string,
     targetId?: string,
+    position: DropPosition = "bottom",
   ) => {
     event.preventDefault();
     event.stopPropagation();
 
     const data = event.dataTransfer.getData("text/plain");
 
-    if (!data.startsWith("task:")) {
-      return;
-    }
+    if (!data.startsWith("task:")) return;
 
-    const id = data.slice("task:".length) || draggedTaskId;
+    const id = data.slice("task:".length);
 
     if (!id || id === targetId) {
       handleTaskDragEnd();
@@ -57,37 +58,53 @@ const useDragDrop = ({
 
       if (!moving) return prev;
 
+      // 이동할 Task 제거
       const remaining = prev.filter((task) => task.id !== id);
 
+      // 새로운 컬럼 정보 적용
       const updated: Task = {
         ...moving,
         status,
         listId,
       };
 
-      const targetIndex = targetId
-        ? remaining.findIndex((task) => task.id === targetId)
-        : -1;
+      let insertIndex = remaining.length;
 
-      if (targetIndex !== -1) {
-        remaining.splice(targetIndex, 0, updated);
-      } else {
-        remaining.push(updated);
+      if (targetId) {
+        const targetIndex = remaining.findIndex(
+          (task) =>
+            task.id === targetId &&
+            task.status === status &&
+            task.listId === listId,
+        );
+
+        if (targetIndex !== -1) {
+          insertIndex = position === "top" ? targetIndex : targetIndex + 1;
+        }
       }
 
-      if (
+      // 대상 카드가 없으면 해당 컬럼의 마지막에 삽입
+      if (insertIndex === remaining.length && !targetId) {
+        const lastIndex = remaining.findLastIndex(
+          (task) => task.status === status && task.listId === listId,
+        );
+
+        insertIndex = lastIndex === -1 ? remaining.length : lastIndex + 1;
+      }
+
+      remaining.splice(insertIndex, 0, updated);
+
+      // 변경이 없는 경우 업데이트 방지
+      const isSame =
         remaining.length === prev.length &&
         remaining.every(
           (task, index) =>
             task.id === prev[index].id &&
             task.status === prev[index].status &&
             task.listId === prev[index].listId,
-        )
-      ) {
-        return prev;
-      }
+        );
 
-      return remaining;
+      return isSame ? prev : remaining;
     });
 
     handleTaskDragEnd();
@@ -123,16 +140,19 @@ const useDragDrop = ({
 
     const data = event.dataTransfer.getData("text/plain");
 
-    if (!data.startsWith("column:")) {
-      return;
-    }
+    if (!data.startsWith("column:")) return;
 
     const source = data.slice("column:".length) || draggedColumnId;
+
     if (!source) return;
+
     const separator = source.lastIndexOf(":");
+
     if (separator < 0) return;
+
     const sourceListId = source.slice(0, separator);
     const sourceStatus = source.slice(separator + 1) as TaskStatus;
+
     if (sourceListId !== targetListId || sourceStatus === targetStatus) {
       handleColumnDragEnd();
       return;
