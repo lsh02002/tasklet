@@ -179,7 +179,10 @@ function App() {
   }, [canUndo, canRedo, undo, redo]);
 
   // Task 드래그 시작
-  const handleDragStart = (event: DragEvent<HTMLElement>, taskId: string) => {
+  const handleTaskDragStart = (
+    event: DragEvent<HTMLElement>,
+    taskId: string,
+  ) => {
     event.stopPropagation();
 
     event.dataTransfer.setData("application/x-task", taskId);
@@ -189,12 +192,12 @@ function App() {
   };
 
   // Task 드래그 종료
-  const handleDragEnd = () => {
+  const handleTaskDragEnd = () => {
     setDraggedId(null);
   };
 
   // Task 드롭
-  const handleDrop = (
+  const handleTaskDrop = (
     event: DragEvent<HTMLElement>,
     status: TaskStatus,
     targetId?: string,
@@ -209,7 +212,7 @@ function App() {
     const id = event.dataTransfer.getData("application/x-task") || draggedId;
 
     if (!id || id === targetId) {
-      handleDragEnd();
+      handleTaskDragEnd();
       return;
     }
 
@@ -248,7 +251,7 @@ function App() {
       return remaining;
     });
 
-    handleDragEnd();
+    handleTaskDragEnd();
   };
 
   // Column 드래그 시작
@@ -374,7 +377,7 @@ function App() {
                 } else if (
                   event.dataTransfer.types.includes("application/x-task")
                 ) {
-                  handleDrop(event, column.status);
+                  handleTaskDrop(event, column.status);
                 }
               }}
             >
@@ -409,13 +412,13 @@ function App() {
                   <Card
                     key={task.id}
                     task={task}
-                    onDragStart={handleDragStart}
-                    onDragEnd={handleDragEnd}
+                    onDragStart={handleTaskDragStart}
+                    onDragEnd={handleTaskDragEnd}
                     onDrop={(event) => {
                       if (
                         event.dataTransfer.types.includes("application/x-task")
                       ) {
-                        handleDrop(event, column.status, task.id);
+                        handleTaskDrop(event, column.status, task.id);
                       }
                     }}
                     onDelete={() => deleteTask(task.id)}
