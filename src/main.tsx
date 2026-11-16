@@ -1,5 +1,10 @@
 import { createRoot } from "react-dom/client";
 import "bootstrap/dist/css/bootstrap.min.css";
 import App from "./App";
+import { ModalProvider } from "./components/hooks/ModalManager";
 
-createRoot(document.getElementById("root")!).render(<App />);
+createRoot(document.getElementById("root")!).render(
+  <ModalProvider>
+    <App />
+  </ModalProvider>,
+);
