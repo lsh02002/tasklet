@@ -1,28 +1,32 @@
-export type CanvasDropTarget = {
-  parentId: string | null;
-  index: number;
-  area: "canvas" | "layer";
-};
-
-export type ContainerDirection = "row" | "column";
-
 export type TaskStatus = "todo" | "doing" | "done";
 
-export type Task = {
+export interface Task {
   id: string;
   title: string;
   status: TaskStatus;
-};
+}
+
+export interface Column {
+  status: TaskStatus;
+  title: string;
+  color: string;
+}
+
+export interface BoardState {
+  tasks: Task[];
+  columns: Column[];
+}
 
 export interface HistoryState {
-  past: Task[][];
-  present: Task[];
-  future: Task[][];
+  past: BoardState[];
+  present: BoardState;
+  future: BoardState[];
 }
 
 export type TasksUpdater =
   | Task[]
   | ((prev: Task[]) => Task[]);
 
-  
-export type HistoryUpdater = (prev: Task[]) => Task[];
+export type ColumnsUpdater =
+  | Column[]
+  | ((prev: Column[]) => Column[]);

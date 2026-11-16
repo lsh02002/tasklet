@@ -1,12 +1,17 @@
 import { type DragEvent, useCallback, useEffect, useState } from "react";
-import type { Task, TaskStatus, HistoryState, TasksUpdater } from "./type";
+
+import type {
+  Task,
+  TaskStatus,
+  Column,
+  HistoryState,
+  TasksUpdater,
+  ColumnsUpdater,
+} from "./type";
+
 import Card from "./Card";
 
-const columns: {
-  status: TaskStatus;
-  title: string;
-  color: string;
-}[] = [
+const initialColumns: Column[] = [
   { status: "todo", title: "할 일", color: "#E3F2FD" },
   { status: "doing", title: "진행 중", color: "#FFF3CD" },
   { status: "done", title: "완료", color: "#D1E7DD" },
@@ -21,38 +26,83 @@ const initialTasks: Task[] = [
 function App() {
   const [history, setHistory] = useState<HistoryState>({
     past: [],
-    present: initialTasks,
+    present: {
+      tasks: initialTasks,
+      columns: initialColumns,
+    },
     future: [],
   });
 
   const [draggedId, setDraggedId] = useState<string | null>(null);
 
-  const tasks = history.present;
+  const [draggedColumn, setDraggedColumn] = useState<TaskStatus | null>(null);
+
+  const { tasks, columns } = history.present;
+
   const canUndo = history.past.length > 0;
   const canRedo = history.future.length > 0;
 
-  // 작업 변경 및 히스토리 기록
+  // Task 변경 및 히스토리 기록
   const setTasks = useCallback(
     (updater: TasksUpdater, recordHistory = true) => {
       setHistory((prev) => {
         const nextTasks =
-          typeof updater === "function" ? updater(prev.present) : updater;
+          typeof updater === "function" ? updater(prev.present.tasks) : updater;
 
-        // 변경 사항이 없으면 기록하지 않음
-        if (nextTasks === prev.present) {
+        if (nextTasks === prev.present.tasks) {
           return prev;
         }
+
+        const nextPresent = {
+          ...prev.present,
+          tasks: nextTasks,
+        };
 
         if (!recordHistory) {
           return {
             ...prev,
-            present: nextTasks,
+            present: nextPresent,
           };
         }
 
         return {
           past: [...prev.past, prev.present],
-          present: nextTasks,
+          present: nextPresent,
+          future: [],
+        };
+      });
+    },
+    [],
+  );
+
+  // Column 변경 및 히스토리 기록
+  const setColumns = useCallback(
+    (updater: ColumnsUpdater, recordHistory = true) => {
+      setHistory((prev) => {
+        const nextColumns =
+          typeof updater === "function"
+            ? updater(prev.present.columns)
+            : updater;
+
+        if (nextColumns === prev.present.columns) {
+          return prev;
+        }
+
+        const nextPresent = {
+          ...prev.present,
+          columns: nextColumns,
+        };
+
+        if (!recordHistory) {
+          return {
+            ...prev,
+            present: nextPresent,
+          };
+        }
+
+        return {
+          past: [...prev.past, prev.present],
+          present: nextPresent,
           future: [],
         };
       });
@@ -95,6 +145,17 @@ function App() {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (!event.ctrlKey && !event.metaKey) return;
 
+      // 입력 중에는 브라우저 기본 Undo/Redo 유지
+      const target = event.target;
+
+      if (
+        target instanceof HTMLElement &&
+        (target.isContentEditable ||
+          ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName))
+      ) {
+        return;
+      }
+
       const key = event.key.toLowerCase();
 
       if (key === "z" && !event.shiftKey) {
@@ -117,19 +178,22 @@ function App() {
     };
   }, [canUndo, canRedo, undo, redo]);
 
-  // 드래그 시작
+  // Task 드래그 시작
   const handleDragStart = (event: DragEvent<HTMLElement>, taskId: string) => {
-    event.dataTransfer.setData("text/plain", taskId);
+    event.stopPropagation();
+
+    event.dataTransfer.setData("application/x-task", taskId);
     event.dataTransfer.effectAllowed = "move";
+
     setDraggedId(taskId);
   };
 
-  // 드래그 종료
+  // Task 드래그 종료
   const handleDragEnd = () => {
     setDraggedId(null);
   };
 
-  // 드롭 처리
+  // Task 드롭
   const handleDrop = (
     event: DragEvent<HTMLElement>,
     status: TaskStatus,
@@ -138,7 +202,11 @@ function App() {
     event.preventDefault();
     event.stopPropagation();
 
-    const id = event.dataTransfer.getData("text/plain") || draggedId;
+    if (!event.dataTransfer.types.includes("application/x-task")) {
+      return;
+    }
+
+    const id = event.dataTransfer.getData("application/x-task") || draggedId;
 
     if (!id || id === targetId) {
       handleDragEnd();
@@ -167,7 +235,6 @@ function App() {
         remaining.push(updated);
       }
 
-      // 실제 순서나 상태가 같으면 변경하지 않음
       if (
         remaining.length === prev.length &&
         remaining.every(
@@ -184,7 +251,66 @@ function App() {
     handleDragEnd();
   };
 
-  // 작업 추가
+  // Column 드래그 시작
+  const handleColumnDragStart = (
+    event: DragEvent<HTMLElement>,
+    status: TaskStatus,
+  ) => {
+    event.stopPropagation();
+
+    event.dataTransfer.setData("application/x-column", status);
+    event.dataTransfer.effectAllowed = "move";
+
+    setDraggedColumn(status);
+  };
+
+  // Column 드래그 종료
+  const handleColumnDragEnd = () => {
+    setDraggedColumn(null);
+  };
+
+  // Column 드롭
+  const handleColumnDrop = (
+    event: DragEvent<HTMLElement>,
+    targetStatus: TaskStatus,
+  ) => {
+    event.preventDefault();
+    event.stopPropagation();
+
+    const sourceStatus =
+      event.dataTransfer.getData("application/x-column") || draggedColumn;
+
+    if (!sourceStatus || sourceStatus === targetStatus) {
+      handleColumnDragEnd();
+      return;
+    }
+
+    setColumns((prev) => {
+      const sourceIndex = prev.findIndex(
+        (column) => column.status === sourceStatus,
+      );
+
+      const targetIndex = prev.findIndex(
+        (column) => column.status === targetStatus,
+      );
+
+      if (sourceIndex === -1 || targetIndex === -1) {
+        return prev;
+      }
+
+      const next = [...prev];
+
+      const [moving] = next.splice(sourceIndex, 1);
+
+      next.splice(targetIndex, 0, moving);
+
+      return next;
+    });
+
+    handleColumnDragEnd();
+  };
+
+  // Task 추가
   const addTask = (status: TaskStatus) => {
     const title = window.prompt("Enter task title");
 
@@ -200,7 +326,7 @@ function App() {
     ]);
   };
 
-  // 작업 삭제
+  // Task 삭제
   const deleteTask = (taskId: string) => {
     setTasks((prev) => prev.filter((task) => task.id !== taskId));
   };
@@ -234,12 +360,40 @@ function App() {
           <div className="col-md-4" key={column.status}>
             <div
               className="rounded p-3 h-100"
-              style={{ minHeight: 300, backgroundColor: column.color }}
-              onDragOver={(event) => event.preventDefault()}
-              onDrop={(event) => handleDrop(event, column.status)}
+              style={{
+                minHeight: 300,
+                backgroundColor: column.color,
+                opacity: draggedColumn === column.status ? 0.5 : 1,
+              }}
+              onDragOver={(event) => {
+                event.preventDefault();
+              }}
+              onDrop={(event) => {
+                if (event.dataTransfer.types.includes("application/x-column")) {
+                  handleColumnDrop(event, column.status);
+                } else if (
+                  event.dataTransfer.types.includes("application/x-task")
+                ) {
+                  handleDrop(event, column.status);
+                }
+              }}
             >
               <div className="d-flex justify-content-between align-items-center">
-                <h5 className="mb-3">{column.title}</h5>
+                <h5
+                  className="mb-3"
+                  draggable
+                  onDragStart={(event) =>
+                    handleColumnDragStart(event, column.status)
+                  }
+                  onDragEnd={handleColumnDragEnd}
+                  style={{
+                    cursor: "grab",
+                    userSelect: "none",
+                  }}
+                >
+                  <span className="me-2">⠿</span>
+                  {column.title}
+                </h5>
 
                 <button
                   className="btn btn-primary mb-3"
@@ -257,9 +411,13 @@ function App() {
                     task={task}
                     onDragStart={handleDragStart}
                     onDragEnd={handleDragEnd}
-                    onDrop={(event) =>
-                      handleDrop(event, column.status, task.id)
-                    }
+                    onDrop={(event) => {
+                      if (
+                        event.dataTransfer.types.includes("application/x-task")
+                      ) {
+                        handleDrop(event, column.status, task.id);
+                      }
+                    }}
                     onDelete={() => deleteTask(task.id)}
                   />
                 ))}
