@@ -9,7 +9,13 @@ type CardProps = {
   onDelete: () => void;
 };
 
-function Card({ task, onDragStart, onDragEnd, onDrop, onDelete }: CardProps) {
+function TaskCard({
+  task,
+  onDragStart,
+  onDragEnd,
+  onDrop,
+  onDelete,
+}: CardProps) {
   const [isOver, setIsOver] = useState(false);
 
   return (
@@ -54,4 +60,4 @@ function Card({ task, onDragStart, onDragEnd, onDrop, onDelete }: CardProps) {
   );
 }
 
-export default Card;
+export default TaskCard;

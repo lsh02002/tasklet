@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import Columns from "./Columns";
+import ListCard from "./ListCard";
 import useHistory from "../hooks/useHistory";
 import useCrud from "../hooks/useCrud";
 import useDragDrop from "../hooks/useDragDrop";
@@ -78,29 +78,17 @@ function Kanban() {
 
       <div>
         {lists.map((list) => (
-          <section key={list.id} className="mb-4 py-3">
-            <div className="d-flex justify-content-between">
-              <h3>{list.title}</h3>
-
-              <button
-                className="btn btn-outline-danger mb-3"
-                onClick={() => crud.deleteList(list.id)}
-                disabled={busy}
-              >
-                삭제
-              </button>
-            </div>
-
-            <Columns
-              listId={list.id}
-              columns={columns}
-              tasks={tasks}
-              busy={busy}
-              addTask={crud.addTask}
-              deleteTask={crud.deleteTask}
-              {...dragDrop}
-            />
-          </section>
+          <ListCard
+            key={list.id}
+            list={list}
+            deleteList={crud.deleteList}
+            columns={columns}
+            tasks={tasks}
+            busy={busy}
+            addTask={crud.addTask}
+            deleteTask={crud.deleteTask}
+            {...dragDrop}
+          />
         ))}
       </div>
     </div>

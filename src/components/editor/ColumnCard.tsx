@@ -1,5 +1,5 @@
 import type { DragEvent } from "react";
-import Card from "./Card";
+import TaskCard from "./TaskCard";
 import type { BoardState, TaskStatus } from "../../type";
 
 type Column = BoardState["columns"][number];
@@ -33,7 +33,7 @@ interface ColumnsProps {
   ) => void;
 }
 
-export default function Columns({
+export default function ColumnCard({
   listId,
   columns,
   tasks,
@@ -93,7 +93,7 @@ export default function Columns({
                   task.listId === listId && task.status === column.status,
               )
               .map((task) => (
-                <Card
+                <TaskCard
                   key={task.id}
                   task={task}
                   onDragStart={handleTaskDragStart}
