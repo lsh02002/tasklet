@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import BoardColumns from "./BoardColumns";
+import Columns from "./Columns";
 import useHistory from "../hooks/useHistory";
 import useCrud from "../hooks/useCrud";
 import useDragDrop from "../hooks/useDragDrop";
@@ -91,7 +91,7 @@ function Kanban() {
               </button>
             </div>
 
-            <BoardColumns
+            <Columns
               listId={list.id}
               columns={columns}
               tasks={tasks}

@@ -5,7 +5,7 @@ import type { BoardState, TaskStatus } from "../../type";
 type Column = BoardState["columns"][number];
 type Task = BoardState["tasks"][number];
 
-interface BoardColumnsProps {
+interface ColumnsProps {
   listId: string;
   columns: Column[];
   tasks: Task[];
@@ -33,7 +33,7 @@ interface BoardColumnsProps {
   ) => void;
 }
 
-export default function BoardColumns({
+export default function Columns({
   listId,
   columns,
   tasks,
@@ -46,7 +46,7 @@ export default function BoardColumns({
   handleTaskDragStart,
   handleTaskDragEnd,
   handleTaskDrop,
-}: BoardColumnsProps) {
+}: ColumnsProps) {
   return (
     <div className="d-flex justify-content-between gap-3">
       {columns
