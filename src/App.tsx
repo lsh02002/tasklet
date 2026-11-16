@@ -1,11 +1,15 @@
 import { type DragEvent, useCallback, useEffect, useState } from "react";
-import Card from "./Card";
 import type { Task, TaskStatus, HistoryState, TasksUpdater } from "./type";
+import Card from "./Card";
 
-const columns: { status: TaskStatus; title: string }[] = [
-  { status: "todo", title: "할 일" },
-  { status: "doing", title: "진행 중" },
-  { status: "done", title: "완료" },
+const columns: {
+  status: TaskStatus;
+  title: string;
+  color: string;
+}[] = [
+  { status: "todo", title: "할 일", color: "#E3F2FD" },
+  { status: "doing", title: "진행 중", color: "#FFF3CD" },
+  { status: "done", title: "완료", color: "#D1E7DD" },
 ];
 
 const initialTasks: Task[] = [
@@ -229,8 +233,8 @@ function App() {
         {columns.map((column) => (
           <div className="col-md-4" key={column.status}>
             <div
-              className="bg-light rounded p-3 h-100"
-              style={{ minHeight: 300 }}
+              className="rounded p-3 h-100"
+              style={{ minHeight: 300, backgroundColor: column.color }}
               onDragOver={(event) => event.preventDefault()}
               onDrop={(event) => handleDrop(event, column.status)}
             >
