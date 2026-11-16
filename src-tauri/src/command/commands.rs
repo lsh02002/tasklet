@@ -2,7 +2,7 @@ use tauri::State;
 use uuid::Uuid;
 
 use crate::{
-    models::{BoardState, HistoryState, Task, TaskStatus},
+    models::{BoardState, Column, HistoryState, List, Task, TaskStatus},
     state::AppState,
 };
 
@@ -28,17 +28,89 @@ pub fn update_board(
     })
 }
 
-// Task 추가
+#[tauri::command]
+pub fn add_list(
+    state: State<'_, AppState>,
+    title: String,
+) -> Result<HistoryState, String> {
+    let title = title.trim().to_string();
+
+    if title.is_empty() {
+        return Err("List title cannot be empty".into());
+    }
+
+    mutate(&state, |history| {
+        let mut board = history.present.clone();
+        let list_id = Uuid::new_v4().to_string();
+
+        board.lists.push(List {
+            id: list_id.clone(),
+            title,
+        });
+
+        for (status, name, color) in [
+            (TaskStatus::Todo, "할 일", "#E3F2FD"),
+            (TaskStatus::Doing, "진행 중", "#FFF3CD"),
+            (TaskStatus::Done, "완료", "#D1E7DD"),
+        ] {
+            board.columns.push(Column {
+                list_id: list_id.clone(),
+                status,
+                title: name.into(),
+                color: color.into(),
+            });
+        }
+
+        history.update(board);
+    })
+}
+
+#[tauri::command]
+pub fn delete_list(
+    state: State<'_, AppState>,
+    list_id: String,
+) -> Result<HistoryState, String> {
+    mutate(&state, |history| {
+        let mut board = history.present.clone();
+
+        board.lists.retain(|list| list.id != list_id);
+
+        board.columns.retain(|column| {
+            column.list_id != list_id
+        });
+
+        board.tasks.retain(|task| {
+            task.list_id != list_id
+        });
+
+        history.update(board);
+    })
+}
+
 #[tauri::command]
 pub fn add_task(
     state: State<'_, AppState>,
     title: String,
     status: TaskStatus,
+    list_id: String,
 ) -> Result<HistoryState, String> {
     let title = title.trim().to_string();
 
     if title.is_empty() {
         return Err("Task title cannot be empty".into());
+    }
+
+    {
+        let history = state.history.lock()
+            .map_err(|e| e.to_string())?;
+
+        let exists = history.present.columns.iter().any(|col| {
+            col.list_id == list_id && col.status == status
+        });
+
+        if !exists {
+            return Err("Target column does not exist".into());
+        }
     }
 
     mutate(&state, |history| {
@@ -48,6 +120,7 @@ pub fn add_task(
             id: Uuid::new_v4().to_string(),
             title,
             status,
+            list_id,
         });
 
         history.update(board);

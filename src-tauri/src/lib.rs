@@ -26,6 +26,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::get_board,
             commands::update_board,
+            commands::add_list,
+            commands::delete_list,
             commands::add_task,
             commands::delete_task,
             commands::undo,

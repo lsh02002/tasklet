@@ -13,8 +13,14 @@ export const boardApi = {
   updateBoard: (board: BoardState) =>
     invoke<HistoryState>("update_board", { board }),
 
-  addTask: (title: string, status: TaskStatus) =>
-    invoke<HistoryState>("add_task", { title, status }),
+  addList: (title: string) =>
+    invoke<HistoryState>("add_list", { title }),
+
+  deleteList: (listId: string) =>
+    invoke<HistoryState>("delete_list", { listId }),
+
+  addTask: (title: string, status: TaskStatus,listId: string) =>
+    invoke<HistoryState>("add_task", { title, status, listId }),
 
   deleteTask: (taskId: string) =>
     invoke<HistoryState>("delete_task", { taskId }),

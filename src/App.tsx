@@ -12,19 +12,21 @@ import type {
   Column,
   HistoryState,
   BoardState,
+  List,
 } from "./type";
 
 import Card from "./Card";
 import { boardApi } from "./api/board";
 
+const initialLists: List[] = [];
 const initialColumns: Column[] = [];
-
 const initialTasks: Task[] = [];
 
 function App() {
   const [history, setHistory] = useState<HistoryState>({
     past: [],
     present: {
+      lists: initialLists,
       tasks: initialTasks,
       columns: initialColumns,
     },
@@ -32,13 +34,14 @@ function App() {
   });
 
   const [draggedId, setDraggedId] = useState<string | null>(null);
-  const [draggedColumn, setDraggedColumn] = useState<TaskStatus | null>(null);
+  const [draggedColumn, setDraggedColumn] = useState<string | null>(null);
 
   const [busy, setBusy] = useState(false);
 
   const historyRef = useRef<HistoryState | null>(null);
   const busyRef = useRef(false);
 
+  const lists = history.present.lists ?? [];
   const tasks = history?.present.tasks ?? [];
   const columns = history?.present.columns ?? [];
 
@@ -124,19 +127,30 @@ function App() {
     };
   }, [canUndo, canRedo, undo, redo]);
 
-  const addTask = async (status: TaskStatus) => {
-    const title = window.prompt("Enter task title");
-
+  const addList = async () => {
+    const title = window.prompt("List 이름");
     if (!title?.trim()) return;
 
-    const next = await boardApi.addTask(title.trim(), status);
+    await runCommand(() => boardApi.addList(title.trim()));
+  };
 
-    setHistory(next);
+  const deleteList = async (listId: string) => {
+    if (!window.confirm("List와 모든 Task를 삭제하시겠습니까?")) {
+      return;
+    }
+
+    await runCommand(() => boardApi.deleteList(listId));
+  };
+
+  const addTask = async (status: TaskStatus, listId: string) => {
+    const title = window.prompt("Task 이름");
+    if (!title?.trim()) return;
+
+    await runCommand(() => boardApi.addTask(title.trim(), status, listId));
   };
 
   const deleteTask = async (taskId: string) => {
-    const next = await boardApi.deleteTask(taskId);
-    setHistory(next);
+    await runCommand(() => boardApi.deleteTask(taskId));
   };
 
   // Task 변경
@@ -207,6 +221,7 @@ function App() {
   const handleTaskDrop = (
     event: DragEvent<HTMLElement>,
     status: TaskStatus,
+    listId: string,
     targetId?: string,
   ) => {
     event.preventDefault();
@@ -235,6 +250,7 @@ function App() {
       const updated: Task = {
         ...moving,
         status,
+        listId,
       };
 
       const targetIndex = targetId
@@ -251,7 +267,9 @@ function App() {
         remaining.length === prev.length &&
         remaining.every(
           (task, index) =>
-            task.id === prev[index].id && task.status === prev[index].status,
+            task.id === prev[index].id &&
+            task.status === prev[index].status &&
+            task.listId === prev[index].listId,
         )
       ) {
         return prev;
@@ -267,13 +285,14 @@ function App() {
   const handleColumnDragStart = (
     event: DragEvent<HTMLElement>,
     status: TaskStatus,
+    listId: string,
   ) => {
     event.stopPropagation();
 
-    event.dataTransfer.setData("text/plain", `column:${status}`);
+    event.dataTransfer.setData("text/plain", `column:${listId}:${status}`);
 
     event.dataTransfer.effectAllowed = "move";
-    setDraggedColumn(status);
+    setDraggedColumn(`${listId}:${status}`);
   };
 
   // Column 드래그 종료
@@ -285,6 +304,7 @@ function App() {
   const handleColumnDrop = (
     event: DragEvent<HTMLElement>,
     targetStatus: TaskStatus,
+    targetListId: string,
   ) => {
     event.preventDefault();
     event.stopPropagation();
@@ -295,21 +315,26 @@ function App() {
       return;
     }
 
-    const sourceStatus =
-      (data.slice("column:".length) as TaskStatus) || draggedColumn;
-
-    if (!sourceStatus || sourceStatus === targetStatus) {
+    const source = data.slice("column:".length) || draggedColumn;
+    if (!source) return;
+    const separator = source.lastIndexOf(":");
+    if (separator < 0) return;
+    const sourceListId = source.slice(0, separator);
+    const sourceStatus = source.slice(separator + 1) as TaskStatus;
+    if (sourceListId !== targetListId || sourceStatus === targetStatus) {
       handleColumnDragEnd();
       return;
     }
 
     void updateColumns((prev) => {
       const sourceIndex = prev.findIndex(
-        (column) => column.status === sourceStatus,
+        (column) =>
+          column.listId === sourceListId && column.status === sourceStatus,
       );
 
       const targetIndex = prev.findIndex(
-        (column) => column.status === targetStatus,
+        (column) =>
+          column.listId === targetListId && column.status === targetStatus,
       );
 
       if (sourceIndex === -1 || targetIndex === -1) {
@@ -329,7 +354,7 @@ function App() {
   };
 
   return (
-    <div className="container-fluid p-4">
+    <div className="container-fluid">
       <div className="d-flex justify-content-between align-items-center mb-4">
         <h3 className="mb-0">Tasklet</h3>
 
@@ -349,83 +374,89 @@ function App() {
           >
             Redo
           </button>
+          <button className="btn btn-primary" onClick={addList} disabled={busy}>
+            + List
+          </button>
         </div>
       </div>
 
-      <div className="row g-3">
-        {columns.map((column) => (
-          <div className="col-md-4" key={column.status}>
-            <div
-              className="rounded p-3 h-100"
-              style={{
-                minHeight: 300,
-                backgroundColor: column.color,
-                opacity: draggedColumn === column.status ? 0.5 : 1,
-              }}
-              onDragOver={(event) => {
-                event.preventDefault();
-                event.dataTransfer.dropEffect = "move";
-              }}
-              onDrop={(event) => {
-                event.preventDefault();
-                event.stopPropagation();
+      <div className="container-fluid">
+        {lists.map((list) => (
+          <section key={list.id} className="mb-4 py-3">
+            <div className="d-flex justify-content-between">
+              <h3>{list.title}</h3>
 
-                if (busyRef.current) return;
+              <button
+                className="btn btn-outline-danger mb-3"
+                onClick={() => deleteList(list.id)}
+                disabled={busy}
+              >
+                삭제
+              </button>
+            </div>
 
-                const data = event.dataTransfer.getData("text/plain");
-
-                if (data.startsWith("column:")) {
-                  handleColumnDrop(event, column.status);
-                } else if (data.startsWith("task:")) {
-                  handleTaskDrop(event, column.status);
-                }
-              }}
-            >
-              <div className="d-flex justify-content-between align-items-center">
-                <h5
-                  className="mb-3"
-                  draggable
-                  onDragStart={(event) =>
-                    handleColumnDragStart(event, column.status)
-                  }
-                  onDragEnd={handleColumnDragEnd}
-                  style={{
-                    cursor: "grab",
-                    userSelect: "none",
-                  }}
-                >
-                  <span className="me-2">⠿</span>
-                  {column.title}
-                </h5>
-
-                <button
-                  className="btn btn-primary mb-3"
-                  onClick={() => addTask(column.status)}
-                >
-                  +
-                </button>
-              </div>
-
-              {tasks
-                .filter((task) => task.status === column.status)
-                .map((task) => (
-                  <Card
-                    key={task.id}
-                    task={task}
-                    onDragStart={handleTaskDragStart}
-                    onDragEnd={handleTaskDragEnd}
+            <div className="d-flex justify-content-between gap-3">
+              {columns
+                .filter((column) => column.listId === list.id)
+                .map((column) => (
+                  <div
+                    className="card p-3"
+                    style={{ width: "100%", minHeight: 300, backgroundColor: column.color }}
+                    key={`${list.id}-${column.status}`}
+                    draggable={!busy}
+                    onDragStart={(event) =>
+                      handleColumnDragStart(event, column.status, list.id)
+                    }
+                    onDragEnd={handleColumnDragEnd}
+                    onDragOver={(event) => event.preventDefault()}
                     onDrop={(event) => {
                       const data = event.dataTransfer.getData("text/plain");
-
-                      if (data.startsWith("task:")) {
-                        handleTaskDrop(event, column.status, task.id);
+                      if (data.startsWith("column:")) {
+                        handleColumnDrop(event, column.status, list.id);
+                      } else if (data.startsWith("task:")) {
+                        handleTaskDrop(event, column.status, list.id);
                       }
                     }}
-                    onDelete={() => deleteTask(task.id)}
-                  />
+                  >
+                    <div className="d-flex justify-content-between">
+                      <h5>{column.title}</h5>
+
+                      <button
+                        className="btn btn-outline-primary mb-2"
+                        onClick={() => addTask(column.status, list.id)}
+                        disabled={busy}
+                      >
+                        + Task
+                      </button>
+                    </div>
+
+                    {tasks
+                      .filter(
+                        (task) =>
+                          task.listId === list.id &&
+                          task.status === column.status,
+                      )
+                      .map((task) => (
+                        <Card
+                          key={task.id}
+                          task={task}
+                          onDragStart={handleTaskDragStart}
+                          onDragEnd={handleTaskDragEnd}
+                          onDrop={(event) =>
+                            handleTaskDrop(
+                              event,
+                              column.status,
+                              list.id,
+                              task.id,
+                            )
+                          }
+                          onDelete={() => deleteTask(task.id)}
+                        />
+                      ))}
+                  </div>
                 ))}
             </div>
-          </div>
+          </section>
         ))}
       </div>
     </div>
