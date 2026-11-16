@@ -57,7 +57,7 @@ export default function ColumnCard({
             className="card p-3"
             style={{
               width: "100%",
-              minHeight: 300,
+              height: "100%",
               backgroundColor: column.color,
             }}
             draggable={!busy}
@@ -78,13 +78,6 @@ export default function ColumnCard({
           >
             <div className="d-flex justify-content-between">
               <h5>{column.title}</h5>
-              <button
-                className="btn btn-outline-primary mb-2"
-                onClick={() => addTask(column.status, listId)}
-                disabled={busy}
-              >
-                + Task
-              </button>
             </div>
 
             {tasks
@@ -104,6 +97,13 @@ export default function ColumnCard({
                   onDelete={() => deleteTask(task.id)}
                 />
               ))}
+            <button
+              className="btn btn-outline-primary mt-3"
+              onClick={() => addTask(column.status, listId)}
+              disabled={busy}
+            >
+              + Task
+            </button>
           </div>
         ))}
     </div>

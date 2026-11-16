@@ -2,7 +2,7 @@ use tauri::State;
 use uuid::Uuid;
 
 use crate::{
-    models::{BoardState, Column, HistoryState, List, Task, TaskStatus},
+    models::{BoardState, Column, HistoryState, List, Task, TaskStatus, TaskType, TaskPriority},
     state::AppState,
 };
 
@@ -46,6 +46,7 @@ pub fn add_list(
         board.lists.push(List {
             id: list_id.clone(),
             title,
+            created_at: None,
         });
 
         for (status, name, color) in [
@@ -58,6 +59,7 @@ pub fn add_list(
                 status,
                 title: name.into(),
                 color: color.into(),
+                created_at: None,
             });
         }
 
@@ -92,6 +94,10 @@ pub fn add_task(
     state: State<'_, AppState>,
     title: String,
     status: TaskStatus,
+    task_type: TaskType,
+    priority: TaskPriority,
+    started_at: Option<String>,
+    ended_at: Option<String>,
     list_id: String,
 ) -> Result<HistoryState, String> {
     let title = title.trim().to_string();
@@ -120,7 +126,13 @@ pub fn add_task(
             id: Uuid::new_v4().to_string(),
             title,
             status,
+            task_type,
+            priority,
+            started_at,
+            ended_at,
             list_id,
+            created_at: None,
+            updated_at: None,
         });
 
         history.update(board);

@@ -1,7 +1,7 @@
 use std::{collections::HashSet, fs, path::PathBuf, sync::Mutex};
 use rusqlite::{params, Connection, OptionalExtension, Transaction};
 use serde_json::{json, Value};
-use crate::models::{BoardState, Column, HistoryState, List, Task, TaskStatus};
+use crate::models::{BoardState, Column, HistoryState, List, Task, TaskStatus, TaskPriority, TaskType};
 
 pub struct AppState {
     pub history: Mutex<HistoryState>,
@@ -12,12 +12,46 @@ fn err<E: std::fmt::Display>(e: E) -> String { e.to_string() }
 fn status_str(s: &TaskStatus) -> &'static str {
     match s { TaskStatus::Todo => "todo", TaskStatus::Doing => "doing", TaskStatus::Done => "done" }
 }
+fn task_type_str(t: &TaskType) -> &'static str {
+    match t {
+        TaskType::Story => "Story",
+        TaskType::Task => "Task",
+        TaskType::Bug => "Bug",
+        TaskType::Epic => "Epic",
+    }
+}
+fn task_priority_str(p: &TaskPriority) -> &'static str {
+    match p {
+        TaskPriority::Low => "Low",
+        TaskPriority::Medium => "Medium",
+        TaskPriority::High => "High",
+        TaskPriority::Urgent => "Urgent",
+    }
+}
 fn parse_status(s: &str) -> rusqlite::Result<TaskStatus> {
     match s {
         "todo" => Ok(TaskStatus::Todo),
         "doing" => Ok(TaskStatus::Doing),
         "done" => Ok(TaskStatus::Done),
         _ => Err(rusqlite::Error::InvalidParameterName(format!("invalid status: {s}"))),
+    }
+}
+fn parse_task_type(value: &str) -> rusqlite::Result<TaskType> {
+    match value {
+        "Story" => Ok(TaskType::Story),
+        "Task" => Ok(TaskType::Task),
+        "Bug" => Ok(TaskType::Bug),
+        "Epic" => Ok(TaskType::Epic),
+        _ => Err(rusqlite::Error::InvalidParameterName(format!("invalid task type: {value}"))),
+    }
+}
+fn parse_task_priority(value: &str) -> rusqlite::Result<TaskPriority> {
+    match value {
+        "Low" => Ok(TaskPriority::Low),
+        "Medium" => Ok(TaskPriority::Medium),
+        "High" => Ok(TaskPriority::High),
+        "Urgent" => Ok(TaskPriority::Urgent),
+        _ => Err(rusqlite::Error::InvalidParameterName(format!("invalid task priority: {value}"))),
     }
 }
 fn table_exists(conn: &Connection, name: &str) -> Result<bool, String> {
@@ -70,43 +104,54 @@ fn decode_boards(raw: &str) -> Result<Vec<BoardState>, String> {
 fn create_schema(conn: &Connection) -> Result<(), String> {
     conn.execute_batch("\
         CREATE TABLE IF NOT EXISTS lists (\
-          id TEXT PRIMARY KEY, title TEXT NOT NULL, position INTEGER NOT NULL\
+          id TEXT PRIMARY KEY, title TEXT NOT NULL, position INTEGER NOT NULL,\
+          created_at TEXT NOT NULL DEFAULT (datetime('now', '+9 hours'))\
         );\
         CREATE TABLE IF NOT EXISTS columns (\
           list_id TEXT NOT NULL REFERENCES lists(id),\
           status TEXT NOT NULL CHECK(status IN ('todo','doing','done')),\
           title TEXT NOT NULL, color TEXT NOT NULL, position INTEGER NOT NULL,\
+          created_at TEXT NOT NULL DEFAULT (datetime('now', '+9 hours')),\
           PRIMARY KEY(list_id,status)\
         );\
         CREATE TABLE IF NOT EXISTS tasks (\
           id TEXT PRIMARY KEY, list_id TEXT NOT NULL, title TEXT NOT NULL,\
           status TEXT NOT NULL, position INTEGER NOT NULL,\
+          task_type TEXT NOT NULL CHECK(task_type IN ('Story', 'Task', 'Bug', 'Epic')),\
+          priority TEXT NOT NULL CHECK(priority IN ('Low', 'Medium', 'High', 'Urgent')),\
+          started_at TEXT,\
+          ended_at TEXT,\
+          created_at TEXT NOT NULL DEFAULT (datetime('now', '+9 hours')),\
+          updated_at TEXT NOT NULL DEFAULT (datetime('now', '+9 hours')),\
           FOREIGN KEY(list_id,status) REFERENCES columns(list_id,status)\
         );\
         CREATE TABLE IF NOT EXISTS history (\
-          id INTEGER PRIMARY KEY CHECK(id=1), past TEXT NOT NULL, future TEXT NOT NULL\
+          id INTEGER PRIMARY KEY CHECK(id=1), past TEXT NOT NULL, future TEXT NOT NULL,\
+          created_at TEXT NOT NULL DEFAULT (datetime('now', '+9 hours'))\
         );").map_err(err)
 }
 
 fn read_board(conn: &Connection) -> Result<BoardState, String> {
     let lists = {
-        let mut stmt = conn.prepare("SELECT id,title FROM lists ORDER BY position,rowid").map_err(err)?;
-        let rows = stmt.query_map([], |r| Ok(List { id:r.get(0)?, title:r.get(1)? })).map_err(err)?;
+        let mut stmt = conn.prepare("SELECT id,title,created_at FROM lists ORDER BY position,rowid").map_err(err)?;
+        let rows = stmt.query_map([], |r| Ok(List { id:r.get(0)?, title:r.get(1)?, created_at:r.get(2)? })).map_err(err)?;
         rows.collect::<rusqlite::Result<Vec<_>>>().map_err(err)?
     };
     let columns = {
-        let mut stmt = conn.prepare("SELECT list_id,status,title,color FROM columns ORDER BY position,rowid").map_err(err)?;
+        let mut stmt = conn.prepare("SELECT list_id,status,title,color,created_at FROM columns ORDER BY position,rowid").map_err(err)?;
         let rows = stmt.query_map([], |r| {
             let status: String = r.get(1)?;
-            Ok(Column { list_id:r.get(0)?, status:parse_status(&status)?, title:r.get(2)?, color:r.get(3)? })
+            Ok(Column { list_id:r.get(0)?, status:parse_status(&status)?, title:r.get(2)?, color:r.get(3)?, created_at:r.get(4)? })
         }).map_err(err)?;
         rows.collect::<rusqlite::Result<Vec<_>>>().map_err(err)?
     };
     let tasks = {
-        let mut stmt = conn.prepare("SELECT id,list_id,title,status FROM tasks ORDER BY position,rowid").map_err(err)?;
+        let mut stmt = conn.prepare("SELECT id,list_id,title,status,task_type,priority,started_at,ended_at,created_at,updated_at FROM tasks ORDER BY position,rowid").map_err(err)?;
         let rows = stmt.query_map([], |r| {
             let status: String = r.get(3)?;
-            Ok(Task { id:r.get(0)?, list_id:r.get(1)?, title:r.get(2)?, status:parse_status(&status)? })
+            let task_type: String = r.get(4)?;
+            let priority: String = r.get(5)?;
+            Ok(Task { id:r.get(0)?, list_id:r.get(1)?, title:r.get(2)?, status:parse_status(&status)?, task_type:parse_task_type(&task_type)?, priority:parse_task_priority(&priority)?, started_at:r.get(6)?, ended_at:r.get(7)?, created_at: r.get(8)?, updated_at: r.get(9)? })
         }).map_err(err)?;
         rows.collect::<rusqlite::Result<Vec<_>>>().map_err(err)?
     };
@@ -149,8 +194,8 @@ fn write_snapshot(tx: &Transaction<'_>, history: &HistoryState) -> Result<(), St
             params![&col.list_id,status_str(&col.status),&col.title,&col.color,position as i64]).map_err(err)?;
     }
     for (position, task) in history.present.tasks.iter().enumerate() {
-        tx.execute("INSERT INTO tasks(id,list_id,title,status,position) VALUES (?1,?2,?3,?4,?5)",
-            params![&task.id,&task.list_id,&task.title,status_str(&task.status),position as i64]).map_err(err)?;
+        tx.execute("INSERT INTO tasks(id,list_id,title,status,task_type,priority,started_at,ended_at,position) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9)",
+            params![&task.id,&task.list_id,&task.title,status_str(&task.status),task_type_str(&task.task_type),task_priority_str(&task.priority),&task.started_at,&task.ended_at,position as i64]).map_err(err)?;
     }
     let past = serde_json::to_string(&history.past).map_err(err)?;
     let future = serde_json::to_string(&history.future).map_err(err)?;
@@ -169,18 +214,20 @@ impl AppState {
         let history = if legacy {
             // Capture the old rows and old undo/redo before changing the schema.
             let old_columns = {
-                let mut stmt = conn.prepare("SELECT status,title,color FROM columns ORDER BY position,rowid").map_err(err)?;
+                let mut stmt = conn.prepare("SELECT status,title,color,created_at FROM columns ORDER BY position,rowid").map_err(err)?;
                 let rows = stmt.query_map([], |r| {
                     let status: String = r.get(0)?;
-                    Ok(Column { list_id:"default".into(), status:parse_status(&status)?, title:r.get(1)?, color:r.get(2)? })
+                    Ok(Column { list_id:"default".into(), status:parse_status(&status)?, title:r.get(1)?, color:r.get(2)?, created_at: r.get(3)? })
                 }).map_err(err)?;
                 rows.collect::<rusqlite::Result<Vec<_>>>().map_err(err)?
             };
             let old_tasks = {
-                let mut stmt = conn.prepare("SELECT id,title,status FROM tasks ORDER BY position,rowid").map_err(err)?;
+                let mut stmt = conn.prepare("SELECT id,title,status,task_type,priority,started_at,ended_at,created_at,updated_at FROM tasks ORDER BY position,rowid").map_err(err)?;
                 let rows = stmt.query_map([], |r| {
                     let status: String = r.get(2)?;
-                    Ok(Task { id:r.get(0)?, list_id:"default".into(), title:r.get(1)?, status:parse_status(&status)? })
+                    let task_type: String = r.get(3)?;
+                    let priority: String = r.get(4)?;
+                    Ok(Task { id:r.get(0)?, list_id:"default".into(), title:r.get(1)?, status:parse_status(&status)?, task_type:parse_task_type(&task_type)?, priority:parse_task_priority(&priority)?, started_at:r.get(5)?, ended_at:r.get(6)?, created_at: r.get(7)?, updated_at: r.get(8)? })
                 }).map_err(err)?;
                 rows.collect::<rusqlite::Result<Vec<_>>>().map_err(err)?
             };
@@ -195,7 +242,7 @@ impl AppState {
             let initial = HistoryState {
                 past, future,
                 present: BoardState {
-                    lists:vec![List { id:"default".into(),title:"기본 List".into() }],
+                    lists:vec![List { id:"default".into(),title:"기본 List".into(),created_at: None }],
                     columns:old_columns,tasks:old_tasks,
                 },
             };
