@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import useHistory from "../hooks/useHistory";
 import useCrud from "../hooks/useCrud";
 import useDragDrop from "../hooks/useDragDrop";
@@ -6,9 +6,6 @@ import Card from "./Card";
 import { boardApi } from "../../api/board";
 
 function Kanban() {
-  const [draggedId, setDraggedId] = useState<string | null>(null);
-  const [draggedColumn, setDraggedColumn] = useState<string | null>(null);
-
   const {
     setHistory,
     historyRef,
@@ -40,10 +37,6 @@ function Kanban() {
     handleColumnDragEnd,
     handleColumnDrop,
   } = useDragDrop({
-    draggedId,
-    setDraggedId,
-    draggedColumn,
-    setDraggedColumn,
     updateTasks,
     updateColumns,
   });

@@ -1,21 +1,16 @@
+import { useState } from "react";
 import type { DragEvent } from "react";
 import type { Task, TaskStatus, Column } from "../../type";
 
 const useDragDrop = ({
-  draggedId,
-  setDraggedId,
-  draggedColumn,
-  setDraggedColumn,
   updateTasks,
   updateColumns,
 }: {
-  draggedId: string | null;
-  setDraggedId: (id: string | null) => void;
-  draggedColumn: string | null;
-  setDraggedColumn: (id: string | null) => void;
   updateTasks: (callback: (prev: Task[]) => Task[]) => Promise<void>;
   updateColumns: (callback: (prev: Column[]) => Column[]) => Promise<void>;
 }) => {
+  const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
+  const [draggedColumnId, setDraggedColumnId] = useState<string | null>(null);
   // Task 드래그 시작
   const handleTaskDragStart = (
     event: DragEvent<HTMLElement>,
@@ -26,12 +21,12 @@ const useDragDrop = ({
     event.dataTransfer.setData("text/plain", `task:${taskId}`);
 
     event.dataTransfer.effectAllowed = "move";
-    setDraggedId(taskId);
+    setDraggedTaskId(taskId);
   };
 
   // Task 드래그 종료
   const handleTaskDragEnd = () => {
-    setDraggedId(null);
+    setDraggedTaskId(null);
   };
 
   // Task 드롭
@@ -50,7 +45,7 @@ const useDragDrop = ({
       return;
     }
 
-    const id = data.slice("task:".length) || draggedId;
+    const id = data.slice("task:".length) || draggedTaskId;
 
     if (!id || id === targetId) {
       handleTaskDragEnd();
@@ -109,12 +104,12 @@ const useDragDrop = ({
     event.dataTransfer.setData("text/plain", `column:${listId}:${status}`);
 
     event.dataTransfer.effectAllowed = "move";
-    setDraggedColumn(`${listId}:${status}`);
+    setDraggedColumnId(`${listId}:${status}`);
   };
 
   // Column 드래그 종료
   const handleColumnDragEnd = () => {
-    setDraggedColumn(null);
+    setDraggedColumnId(null);
   };
 
   // Column 드롭
@@ -132,7 +127,7 @@ const useDragDrop = ({
       return;
     }
 
-    const source = data.slice("column:".length) || draggedColumn;
+    const source = data.slice("column:".length) || draggedColumnId;
     if (!source) return;
     const separator = source.lastIndexOf(":");
     if (separator < 0) return;
@@ -171,6 +166,10 @@ const useDragDrop = ({
   };
 
   return {
+    draggedTaskId,
+    setDraggedTaskId,
+    draggedColumnId,
+    setDraggedColumnId,
     handleTaskDragStart,
     handleTaskDragEnd,
     handleTaskDrop,
