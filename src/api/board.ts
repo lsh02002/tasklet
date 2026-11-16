@@ -1,33 +1,46 @@
-import { invoke } from "@tauri-apps/api/core";
+import { invoke, type InvokeArgs } from "@tauri-apps/api/core";
+import { toast } from "sonner";
 
-import type {
-  BoardState,
-  HistoryState,
-  TaskStatus,
-} from "../type";
+import type { BoardState, HistoryState, TaskStatus } from "../type";
+
+const invokeWithToast = async <T>(
+  command: string,
+  args?: InvokeArgs,
+): Promise<T> => {
+  try {
+    return await invoke<T>(command, args);
+  } catch (error) {
+    const message =
+      typeof error === "string"
+        ? error
+        : error instanceof Error
+          ? error.message
+          : "알 수 없는 오류가 발생했습니다.";
+
+    toast.error(message);
+    throw error;
+  }
+};
 
 export const boardApi = {
-  getBoard: () =>
-    invoke<HistoryState>("get_board"),
+  getBoard: () => invokeWithToast<HistoryState>("get_board"),
 
   updateBoard: (board: BoardState) =>
-    invoke<HistoryState>("update_board", { board }),
+    invokeWithToast<HistoryState>("update_board", { board }),
 
   addList: (title: string) =>
-    invoke<HistoryState>("add_list", { title }),
+    invokeWithToast<HistoryState>("add_list", { title }),
 
   deleteList: (listId: string) =>
-    invoke<HistoryState>("delete_list", { listId }),
+    invokeWithToast<HistoryState>("delete_list", { listId }),
 
-  addTask: (title: string, status: TaskStatus,listId: string) =>
-    invoke<HistoryState>("add_task", { title, status, listId }),
+  addTask: (title: string, status: TaskStatus, listId: string) =>
+    invokeWithToast<HistoryState>("add_task", { title, status, listId }),
 
   deleteTask: (taskId: string) =>
-    invoke<HistoryState>("delete_task", { taskId }),
+    invokeWithToast<HistoryState>("delete_task", { taskId }),
 
-  undo: () =>
-    invoke<HistoryState>("undo"),
+  undo: () => invokeWithToast<HistoryState>("undo"),
 
-  redo: () =>
-    invoke<HistoryState>("redo"),
+  redo: () => invokeWithToast<HistoryState>("redo"),
 };

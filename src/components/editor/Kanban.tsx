@@ -1,8 +1,8 @@
 import { useEffect } from "react";
+import BoardColumns from "./BoardColumns";
 import useHistory from "../hooks/useHistory";
 import useCrud from "../hooks/useCrud";
 import useDragDrop from "../hooks/useDragDrop";
-import Card from "./Card";
 import { boardApi } from "../../api/board";
 
 function Kanban() {
@@ -20,35 +20,29 @@ function Kanban() {
     redo,
   } = useHistory();
 
-  const {
-    addList,
-    deleteList,
-    addTask,
-    deleteTask,
-    updateTasks,
-    updateColumns,
-  } = useCrud({ historyRef, runCommand });
+  const crud = useCrud({ historyRef, runCommand });
 
-  const {
-    handleTaskDragStart,
-    handleTaskDragEnd,
-    handleTaskDrop,
-    handleColumnDragStart,
-    handleColumnDragEnd,
-    handleColumnDrop,
-  } = useDragDrop({
-    updateTasks,
-    updateColumns,
+  const dragDrop = useDragDrop({
+    updateTasks: crud.updateTasks,
+    updateColumns: crud.updateColumns,
   });
 
   useEffect(() => {
+    let cancelled = false;
+
     boardApi
       .getBoard()
       .then((next) => {
+        if (cancelled) return;
+
         historyRef.current = next;
         setHistory(next);
       })
       .catch(console.error);
+
+    return () => {
+      cancelled = true;
+    };
   }, [historyRef, setHistory]);
 
   return (
@@ -72,13 +66,17 @@ function Kanban() {
           >
             Redo
           </button>
-          <button className="btn btn-primary" onClick={addList} disabled={busy}>
+          <button
+            className="btn btn-primary"
+            onClick={crud.addList}
+            disabled={busy}
+          >
             + List
           </button>
         </div>
       </div>
 
-      <div className="container-fluid">
+      <div>
         {lists.map((list) => (
           <section key={list.id} className="mb-4 py-3">
             <div className="d-flex justify-content-between">
@@ -86,78 +84,22 @@ function Kanban() {
 
               <button
                 className="btn btn-outline-danger mb-3"
-                onClick={() => deleteList(list.id)}
+                onClick={() => crud.deleteList(list.id)}
                 disabled={busy}
               >
                 삭제
               </button>
             </div>
 
-            <div className="d-flex justify-content-between gap-3">
-              {columns
-                .filter((column) => column.listId === list.id)
-                .map((column) => (
-                  <div
-                    className="card p-3"
-                    style={{
-                      width: "100%",
-                      minHeight: 300,
-                      backgroundColor: column.color,
-                    }}
-                    key={`${list.id}-${column.status}`}
-                    draggable={!busy}
-                    onDragStart={(event) =>
-                      handleColumnDragStart(event, column.status, list.id)
-                    }
-                    onDragEnd={handleColumnDragEnd}
-                    onDragOver={(event) => event.preventDefault()}
-                    onDrop={(event) => {
-                      const data = event.dataTransfer.getData("text/plain");
-                      if (data.startsWith("column:")) {
-                        handleColumnDrop(event, column.status, list.id);
-                      } else if (data.startsWith("task:")) {
-                        handleTaskDrop(event, column.status, list.id);
-                      }
-                    }}
-                  >
-                    <div className="d-flex justify-content-between">
-                      <h5>{column.title}</h5>
-
-                      <button
-                        className="btn btn-outline-primary mb-2"
-                        onClick={() => addTask(column.status, list.id)}
-                        disabled={busy}
-                      >
-                        + Task
-                      </button>
-                    </div>
-
-                    {tasks
-                      .filter(
-                        (task) =>
-                          task.listId === list.id &&
-                          task.status === column.status,
-                      )
-                      .map((task) => (
-                        <Card
-                          key={task.id}
-                          task={task}
-                          onDragStart={handleTaskDragStart}
-                          onDragEnd={handleTaskDragEnd}
-                          onDrop={(event) =>
-                            handleTaskDrop(
-                              event,
-                              column.status,
-                              list.id,
-                              task.id,
-                            )
-                          }
-                          onDelete={() => deleteTask(task.id)}
-                        />
-                      ))}
-                  </div>
-                ))}
-            </div>
+            <BoardColumns
+              listId={list.id}
+              columns={columns}
+              tasks={tasks}
+              busy={busy}
+              addTask={crud.addTask}
+              deleteTask={crud.deleteTask}
+              {...dragDrop}
+            />
           </section>
         ))}
       </div>
