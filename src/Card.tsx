@@ -6,9 +6,10 @@ type CardProps = {
   onDragStart: (event: DragEvent<HTMLElement>, taskId: string) => void;
   onDragEnd: () => void;
   onDrop: (event: DragEvent<HTMLElement>) => void;
+  onDelete: () => void;
 };
 
-function Card({ task, onDragStart, onDragEnd, onDrop }: CardProps) {
+function Card({ task, onDragStart, onDragEnd, onDrop, onDelete }: CardProps) {
   const [isOver, setIsOver] = useState(false);
 
   return (
@@ -40,7 +41,15 @@ function Card({ task, onDragStart, onDragEnd, onDrop }: CardProps) {
         opacity: 1,
       }}
     >
-      <div className="card-body p-3">{task.title}</div>
+      <div className="card-body p-3 position-relative">
+        {task.title}
+        <span
+          className="text-danger float-end position-absolute top-0 end-0 px-1 py-0 m-1"
+          onClick={onDelete}
+        >
+          x
+        </span>
+      </div>
     </div>
   );
 }

@@ -13,3 +13,16 @@ export type Task = {
   title: string;
   status: TaskStatus;
 };
+
+export interface HistoryState {
+  past: Task[][];
+  present: Task[];
+  future: Task[][];
+}
+
+export type TasksUpdater =
+  | Task[]
+  | ((prev: Task[]) => Task[]);
+
+  
+export type HistoryUpdater = (prev: Task[]) => Task[];
