@@ -21,8 +21,9 @@ const useDragDrop = ({ updateTasks, updateColumns }: UseDragDropProps) => {
     event.stopPropagation();
 
     event.dataTransfer.setData("text/plain", `task:${taskId}`);
-
+    event.dataTransfer.setData("application/x-kanban-task", taskId);
     event.dataTransfer.effectAllowed = "move";
+    
     setDraggedTaskId(taskId);
   };
 
