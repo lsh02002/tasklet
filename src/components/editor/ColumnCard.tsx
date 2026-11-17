@@ -1,6 +1,12 @@
 import { useState, type DragEvent } from "react";
 import TaskCard from "./TaskCard";
-import type { BoardState, DropPosition, TaskStatus } from "../../type";
+import type {
+  BoardState,
+  DropPosition,
+  TaskStatus,
+  TaskType,
+  TaskPriority,
+} from "../../type";
 
 type Column = BoardState["columns"][number];
 type Task = BoardState["tasks"][number];
@@ -10,7 +16,14 @@ interface ColumnsProps {
   columns: Column[];
   tasks: Task[];
   busy: boolean;
-  addTask: (status: TaskStatus, listId: string) => void;
+  addTask: (
+    status: TaskStatus,
+    taskType: TaskType,
+    priority: TaskPriority,
+    startedAt: string | null,
+    endedAt: string | null,
+    listId: string,
+  ) => void;
   deleteTask: (taskId: string) => void;
   handleColumnDragStart: (
     event: DragEvent<HTMLElement>,
@@ -147,7 +160,9 @@ export default function ColumnCard({
               ))}
             <button
               className="btn btn-outline-primary mt-3"
-              onClick={() => addTask(column.status, listId)}
+              onClick={() =>
+                addTask(column.status, "Task", "Medium", null, null, listId)
+              }
               disabled={busy}
             >
               + Task

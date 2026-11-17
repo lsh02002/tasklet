@@ -6,6 +6,8 @@ import type {
   Task,
   BoardState,
   Column,
+  TaskType,
+  TaskPriority,
 } from "../../type";
 
 const useCrud = ({
@@ -30,11 +32,11 @@ const useCrud = ({
     await runCommand(() => boardApi.deleteList(listId));
   };
 
-  const addTask = async (status: TaskStatus, listId: string) => {
+  const addTask = async (status: TaskStatus, taskType: TaskType, priority: TaskPriority, startedAt: string | null, endedAt: string | null, listId: string) => {
     const title = window.prompt("Task 이름");
     if (!title?.trim()) return;
 
-    await runCommand(() => boardApi.addTask(title.trim(), status, listId));
+    await runCommand(() => boardApi.addTask(title.trim(), status, taskType, priority, startedAt, endedAt, listId));
   };
 
   const deleteTask = async (taskId: string) => {

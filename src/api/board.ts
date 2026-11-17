@@ -1,7 +1,13 @@
 import { invoke, type InvokeArgs } from "@tauri-apps/api/core";
 import { toast } from "sonner";
 
-import type { BoardState, HistoryState, TaskStatus } from "../type";
+import type {
+  BoardState,
+  HistoryState,
+  TaskStatus,
+  TaskType,
+  TaskPriority,
+} from "../type";
 
 const invokeWithToast = async <T>(
   command: string,
@@ -34,8 +40,24 @@ export const boardApi = {
   deleteList: (listId: string) =>
     invokeWithToast<HistoryState>("delete_list", { listId }),
 
-  addTask: (title: string, status: TaskStatus, listId: string) =>
-    invokeWithToast<HistoryState>("add_task", { title, status, listId }),
+  addTask: (
+    title: string,
+    status: TaskStatus,
+    taskType: TaskType,
+    priority: TaskPriority,
+    startedAt: string | null,
+    endedAt: string | null,
+    listId: string,
+  ) =>
+    invokeWithToast<HistoryState>("add_task", {
+      title,
+      status,
+      taskType: taskType.toLowerCase(),
+      priority: priority.toLowerCase(),
+      startedAt,
+      endedAt,
+      listId,
+    }),
 
   deleteTask: (taskId: string) =>
     invokeWithToast<HistoryState>("delete_task", { taskId }),
