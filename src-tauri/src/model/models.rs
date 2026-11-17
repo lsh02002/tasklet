@@ -1,5 +1,4 @@
 use serde::{Deserialize, Serialize};
-use chrono;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct List { pub id: String, pub title: String, pub created_at: Option<String> }
